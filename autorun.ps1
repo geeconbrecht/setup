@@ -112,6 +112,41 @@ function Test-Configure-Chocolatey {
 }
 Test-Configure-Chocolatey
 
+# Variables
+$odtUrl = "https://download.microsoft.com/download/2/d/c/2dc90f4a-3c92-4d31-bb8f-d2b0f11e430d/officedeploymenttool_16130.20306.20248.0.exe"
+$odtExe = "$env:TEMP\ODTSetup.exe"
+$odtExtractPath = "C:\OfficeDeploymentTool"
+$configFile = "$odtExtractPath\Office.xml"  # Adjust path if your Office.xml is elsewhere
+
+# Download Office Deployment Tool
+Write-Host "Downloading Office Deployment Tool..."
+Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe
+
+# Create extract directory
+If (!(Test-Path $odtExtractPath)) {
+    New-Item -Path $odtExtractPath -ItemType Directory | Out-Null
+}
+
+# Extract the Deployment Tool
+Write-Host "Extracting Deployment Tool..."
+Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:$odtExtractPath" -Wait
+
+# Copy Office.xml to the directory (or ensure it’s already there)
+If (!(Test-Path $configFile)) {
+    Write-Host "ERROR: Office.xml not found at $configFile"
+    Exit 1
+}
+
+# Run the download step
+Write-Host "Downloading Office365..."
+Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/download Office.xml" -WorkingDirectory $odtExtractPath -Wait
+
+# Run the install step
+Write-Host "Installing Office365..."
+Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure Office.xml" -WorkingDirectory $odtExtractPath -Wait
+
+Write-Host "Office365 installation complete!"
+
 
 # Functie voor instellingen
 function Set-SystemSettings {
