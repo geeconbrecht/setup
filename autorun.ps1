@@ -56,6 +56,16 @@ function Set-RegistryValues {
 }
 Set-RegistryValues
 
+# Define the download URL and destination path
+$url = "https://rmmeu-geeconitsolutions.screenconnect.com/Bin/ScreenConnect.ClientSetup.exe?e=Access&y=Guest"
+$output = "$env:TEMP\ScreenConnect.ClientSetup.exe"
+
+# Download the installer
+Invoke-WebRequest -Uri $url -OutFile $output
+
+# Run the installer silently
+Start-Process -FilePath $output -ArgumentList "/silent" -Wait
+
 # Functie om Chocolatey te installeren en pakketten 
 
 function Test-Configure-Chocolatey {
@@ -80,7 +90,7 @@ function Test-Configure-Chocolatey {
     $packages = @(
         "greenshot", "googlechrome", "adobereader", 
         "eid-belgium", "eid-belgium-viewer", "winrar",
-        "javaruntime"
+        "javaruntime", "firefox", "office365business"
     )
     choco install vlc -y --params "/S /L=1033" --force
     choco install hpsupportassistant -y --params "/S /L=1033" --force
@@ -322,6 +332,3 @@ function Restart-Computer {
     }
 }
 Restart-Computer
-
-
-
