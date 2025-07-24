@@ -90,7 +90,7 @@ function Test-Configure-Chocolatey {
     $packages = @(
         "greenshot", "googlechrome", "adobereader", 
         "eid-belgium", "eid-belgium-viewer", "winrar",
-        "javaruntime", "firefox", "office365business"
+        "javaruntime", "firefox", "hpimageassistant"
     )
     choco install vlc -y --params "/S /L=1033" --force
     choco install hpsupportassistant -y --params "/S /L=1033" --force
@@ -106,11 +106,27 @@ function Test-Configure-Chocolatey {
             Write-Output "Error installing package: $_"
         }
     }
-
-    #office installeren plus apps
-    winget install --id Microsoft.Office -y 
 }
 Test-Configure-Chocolatey
+
+function Run-HPIA-InstallCoreOnly {
+    $hpiaPath = "C:\ProgramData\chocolatey\lib\hpimageassistant\tools\HPImageAssistant.exe"
+    $reportFolder = "C:\HPIA\Reports"
+
+    if (!(Test-Path $reportFolder)) {
+        New-Item -Path $reportFolder -ItemType Directory -Force | Out-Null
+    }
+
+    if (Test-Path $hpiaPath) {
+        Write-Output "Running HPIA to install BIOS, Drivers, Firmware, Security, and Diagnostics only..."
+        Start-Process -FilePath $hpiaPath `
+            -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent" `
+            -Wait
+    } else {
+        Write-Output "HPImageAssistant.exe not found at $hpiaPath"
+    }
+}
+Run-HPIA-InstallCoreOnly
 
 # Variables
 $odtUrl = "https://download.microsoft.com/download/2/d/c/2dc90f4a-3c92-4d31-bb8f-d2b0f11e430d/officedeploymenttool_16130.20306.20248.0.exe"
