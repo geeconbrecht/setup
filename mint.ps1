@@ -220,11 +220,11 @@ If (!(Test-Path $configFile)) {
 
 # Run the download step
 Write-Host "Downloading Office365..."
-Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/download Office.xml" -WorkingDirectory $odtExtractPath -Wait
+Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/download configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
 
 # Run the install step
 Write-Host "Installing Office365..."
-Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure Office.xml" -WorkingDirectory $odtExtractPath -Wait
+Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
 
 Write-Host "Office365 installation complete!"
 
