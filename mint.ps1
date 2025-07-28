@@ -15,7 +15,7 @@ $SerialNumber = (Get-WmiObject -Class Win32_BIOS).SerialNumber
 $NewPCName = "LT-SSC-$SerialNumber"
 
 # Rename the computer
-Rename-Computer -NewName $NewPCName
+Rename-Computer -NewName $NewPCName -Force -Restart
 
 # Functie om registerwaarden in te stellen
 function Set-RegistryValues {
@@ -73,7 +73,7 @@ function Test-Configure-Chocolatey {
 
     $packages = @(
         "googlechrome", "adobereader", 
-        "eid-belgium", "eid-belgium-viewer", "hpimageassistant", "hpsupportassistant", "1password", "citrix-receiver", "openvpn"
+        "eid-belgium", "eid-belgium-viewer", "hpimageassistant", "hpsupportassistant", "1password", "citrix-receiver", "openvpn", "javaruntime"
     )
 
     foreach ($package in $packages) {
@@ -119,40 +119,11 @@ function Install-TeamViewer14 {
     }
 }
 
-function Install-EndPointCentralAgent {
-    param (
-        [string]$DownloadUrl = "https://download.teamviewer.com/download/version_14x/TeamViewer_Setup.exe",
-        [string]$InstallerPath = "$env:TEMP\TeamViewer_Setup.exe"
-    )
-
-    Write-Host "Downloading TeamViewer 14 from $DownloadUrl..."
-
-    try {
-        # Download the installer
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
-        Write-Host "Download completed: $InstallerPath"
-
-        # Install silently
-        Write-Host "Starting silent installation..."
-        Start-Process -FilePath $InstallerPath -ArgumentList "/S" -Wait -NoNewWindow
-
-        Write-Host "TeamViewer 14 installed successfully."
-    }
-    catch {
-        Write-Error "Installation failed: $_"
-    }
-    finally {
-        # Optional: Clean up the installer
-        if (Test-Path $InstallerPath) {
-            Remove-Item $InstallerPath -Force
-            Write-Host "Cleaned up installer."
-        }
-    }
-}
+Install-TeamViewer14
 
 function Install-CustomSoftware {
     param (
-        [string]$DownloadUrl = "https://we.tl/t-RwvxbLBhhP",  # Replace with your link
+        [string]$DownloadUrl = "geecon.be\Mint\Agent.exe",  # Replace with your link
         [string]$DestinationPath = "$env:TEMP\Installer.exe"
     )
 
@@ -173,6 +144,7 @@ function Install-CustomSoftware {
     }
 }
 
+Install-CustomSoftware
 
 function Run-HPIA-InstallCoreOnly {
     $hpiaPath = "C:\ProgramData\chocolatey\lib\hpimageassistant\tools\HPImageAssistant.exe"
@@ -227,6 +199,7 @@ Write-Host "Installing Office365..."
 Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
 
 Write-Host "Office365 installation complete!"
+
 
 # Functie voor instellingen
 function Set-SystemSettings {
@@ -329,49 +302,6 @@ function Disable-IPv6 {
     }
 }
 Disable-IPv6
-
-#greenshot config files omwisselen
-
-$scriptDirectory = Split-Path -Path $MyInvocation.MyCommand.Path
-
-# Verkrijg het pad naar de Roaming AppData map van de huidige gebruiker
-$appDataPath = [Environment]::GetFolderPath("ApplicationData")
-$greenshotPath = Join-Path -Path $appDataPath -ChildPath "Greenshot"
-
-# Controleer of de Greenshot map bestaat
-if (Test-Path -Path $greenshotPath) {
-    try {
-        # Pad naar de huidige en nieuwe configuratiebestanden
-        $sourceConfigPath = Join-Path -Path $scriptDirectory -ChildPath "Greenshot2.ini"
-        $oldConfigPath = Join-Path -Path $greenshotPath -ChildPath "Greenshot.ini"
-        $newConfigPath = Join-Path -Path $greenshotPath -ChildPath "Greenshot2.ini"
-
-        # Controleer of Greenshot2.ini bestaat in de scriptmap
-        if (-Not (Test-Path -Path $sourceConfigPath)) {t
-            Write-Output "Greenshot2.ini not found in script directory: $scriptDirectory"
-            exit 1
-        }
-
-        # Kopieer Greenshot2.ini naar de Greenshot-map in AppData
-        Copy-Item -Path $sourceConfigPath -Destination $greenshotPath -Force
-        Write-Output "Greenshot2.ini copied to Greenshot folder."
-
-        # Verwijder de oude configuratie (Greenshot.ini) als deze bestaat
-        if (Test-Path -Path $oldConfigPath) {
-            Remove-Item -Path $oldConfigPath -Force
-            Write-Output "Old Greenshot.ini removed."
-        }
-
-        # Hernoem de nieuwe configuratie naar Greenshot.ini
-        Rename-Item -Path $newConfigPath -NewName "Greenshot.ini"
-        Write-Output "Greenshot2.ini renamed to Greenshot.ini."
-
-    } catch {
-        Write-Output "Error processing Greenshot configuration: $_"
-    }
-} else {
-    Write-Output "Greenshot folder does not exist in AppData."
-}
 
 
 # Functie om de PSWindowsUpdate-module te installeren
