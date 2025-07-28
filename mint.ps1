@@ -300,8 +300,14 @@ function Disable-IPv6 {
 Disable-IPv6
 
 
-# Functie om de PSWindowsUpdate-module te installeren
 function Install-PSWindowsUpdateModule {
+    # Ensure NuGet is available without prompting
+    if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+        Write-Output "Installing NuGet provider silently..."
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+    }
+
+    # Now install the module
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         try {
             Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser
@@ -313,7 +319,7 @@ function Install-PSWindowsUpdateModule {
         Write-Output "PSWindowsUpdate module already installed."
     }
 }
-Install-PSWindowsUpdateModule
+
 
 # Functie om Windows-updates te controleren en te installeren
 function Test-AndInstallUpdates {
