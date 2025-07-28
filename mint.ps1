@@ -119,6 +119,60 @@ function Install-TeamViewer14 {
     }
 }
 
+function Install-EndPointCentralAgent {
+    param (
+        [string]$DownloadUrl = "https://download.teamviewer.com/download/version_14x/TeamViewer_Setup.exe",
+        [string]$InstallerPath = "$env:TEMP\TeamViewer_Setup.exe"
+    )
+
+    Write-Host "Downloading TeamViewer 14 from $DownloadUrl..."
+
+    try {
+        # Download the installer
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
+        Write-Host "Download completed: $InstallerPath"
+
+        # Install silently
+        Write-Host "Starting silent installation..."
+        Start-Process -FilePath $InstallerPath -ArgumentList "/S" -Wait -NoNewWindow
+
+        Write-Host "TeamViewer 14 installed successfully."
+    }
+    catch {
+        Write-Error "Installation failed: $_"
+    }
+    finally {
+        # Optional: Clean up the installer
+        if (Test-Path $InstallerPath) {
+            Remove-Item $InstallerPath -Force
+            Write-Host "Cleaned up installer."
+        }
+    }
+}
+
+function Install-CustomSoftware {
+    param (
+        [string]$DownloadUrl = "https://we.tl/t-RwvxbLBhhP",  # Replace with your link
+        [string]$DestinationPath = "$env:TEMP\Installer.exe"
+    )
+
+    try {
+        Write-Host "Downloading installer from WeTransfer..."
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $DestinationPath -UseBasicParsing
+
+        Write-Host "Starting silent installation..."
+        Start-Process -FilePath $DestinationPath -ArgumentList "/silent" -Wait -NoNewWindow
+
+        Write-Host "Installation completed."
+
+        # Optional cleanup
+        Remove-Item $DestinationPath -Force
+    }
+    catch {
+        Write-Error "Error during install: $_"
+    }
+}
+
 
 function Run-HPIA-InstallCoreOnly {
     $hpiaPath = "C:\ProgramData\chocolatey\lib\hpimageassistant\tools\HPImageAssistant.exe"
