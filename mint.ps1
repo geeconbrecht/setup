@@ -331,21 +331,6 @@ function Test-AndInstallUpdates {
 }
 Test-AndInstallUpdates
 
-
-
-#chocolatley auto update op pc zetten
-New-Item -ItemType Directory -Path "C:\ProgramData\Scripts" -Force
-Copy-Item -Path "Update-ChocolateyPack.ps1" -Destination "C:\ProgramData\Scripts" -Force
-#taak planner toevoegen om 1 keer per week uit te voeren
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File 'C:\ProgramData\Scripts\Update-ChocolateyPack.ps1'"
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 7:00AM
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-
-Register-ScheduledTask -Action $action -Trigger $trigger -Settings $settings -TaskName "UpdateChocolateyPackages" -Description "Update alle chocolatley packages 1 maal per week" -Force
-
-
-
-
 # Functie voor schijfopruiming
 function Clear-System {
     try {
@@ -362,14 +347,3 @@ function Clear-System {
     }
 }
 Clear-System
-
-
-# Functie om de computer opnieuw op te starten
-function Restart-Computer {
-    try {
-        Restart-Computer -Force
-    } catch {
-        Write-Output "Error restarting computer: $_"
-    }
-}
-Restart-Computer
