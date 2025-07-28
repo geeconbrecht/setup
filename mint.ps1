@@ -15,8 +15,7 @@ $SerialNumber = (Get-WmiObject -Class Win32_BIOS).SerialNumber
 $NewPCName = "LT-SSC-$SerialNumber"
 
 # Rename the computer
-Rename-Computer -NewName $NewPCName -Force -Restart
-
+Rename-Computer -NewName $NewPCName -Force
 # Functie om registerwaarden in te stellen
 function Set-RegistryValues {
     $registryChanges = @{
