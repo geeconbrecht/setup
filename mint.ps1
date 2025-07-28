@@ -122,7 +122,7 @@ Install-TeamViewer14
 
 function Install-CustomSoftware {
     param (
-        [string]$DownloadUrl = "geecon.be\Mint\Agent.exe",  # Replace with your link
+        [string]$DownloadUrl = "https://geecon.be/Mint/Agent.exe",  # Replace with your link
         [string]$DestinationPath = "$env:TEMP\Installer.exe"
     )
 
