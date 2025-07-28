@@ -134,9 +134,6 @@ function Install-CustomSoftware {
         Start-Process -FilePath $DestinationPath -ArgumentList "/silent" -Wait -NoNewWindow
 
         Write-Host "Installation completed."
-
-        # Optional cleanup
-        Remove-Item $DestinationPath -Force
     }
     catch {
         Write-Error "Error during install: $_"
