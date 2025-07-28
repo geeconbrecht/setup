@@ -129,7 +129,7 @@ function Run-HPIA-InstallCoreOnly {
 Run-HPIA-InstallCoreOnly
 
 # Variables
-$odtUrl = "https://download.microsoft.com/download/2/d/c/2dc90f4a-3c92-4d31-bb8f-d2b0f11e430d/officedeploymenttool_16130.20306.20248.0.exe"
+$odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
 $odtExe = "$env:TEMP\ODTSetup.exe"
 $odtExtractPath = "C:\OfficeDeploymentTool"
 $configFile = "$odtExtractPath\Office.xml"  # Adjust path if your Office.xml is elsewhere
