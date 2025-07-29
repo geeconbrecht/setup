@@ -32,6 +32,10 @@ function Add-LocalAdminUser {
 }
 Add-LocalAdminUser -Username "Admin" -Password "L0c@l"
 
+function Is-HPDevice {
+    $manufacturer = (Get-WmiObject -Class Win32_ComputerSystem).Manufacturer
+    return $manufacturer -like "*Hewlett-Packard*" -or $manufacturer -like "*HP*"
+}
 
 # Functie om registerwaarden in te stellen
 function Set-RegistryValues {
@@ -87,15 +91,12 @@ function Test-Configure-Chocolatey {
 
     Start-Sleep -Seconds 5
 
+    # Common packages for all systems
     $packages = @(
         "greenshot", "googlechrome", "adobereader", 
         "eid-belgium", "eid-belgium-viewer", "winrar",
-        "javaruntime", "firefox", "hpimageassistant"
+        "javaruntime", "firefox"
     )
-    choco install vlc -y --params "/S /L=1033" --force
-    choco install hpsupportassistant -y --params "/S /L=1033" --force
-
-
 
     foreach ($package in $packages) {
         try {
@@ -106,7 +107,23 @@ function Test-Configure-Chocolatey {
             Write-Output "Error installing package: $_"
         }
     }
+
+    # HP-specific packages
+    if (Is-HPDevice) {
+        Write-Output "HP system detected. Installing HP-specific tools..."
+
+        try {
+            choco install hpimageassistant -y --force --ignore-checksums
+            choco install hpsupportassistant -y --params "/S /L=1033" --force
+            Write-Output "HP packages installed successfully."
+        } catch {
+            Write-Output "Error installing HP packages: $_"
+        }
+    } else {
+        Write-Output "Non-HP system detected. Skipping HP-specific installations."
+    }
 }
+
 Test-Configure-Chocolatey
 
 function Run-HPIA-InstallCoreOnly {
@@ -126,7 +143,11 @@ function Run-HPIA-InstallCoreOnly {
         Write-Output "HPImageAssistant.exe not found at $hpiaPath"
     }
 }
-Run-HPIA-InstallCoreOnly
+if (Is-HPDevice) {
+    Run-HPIA-InstallCoreOnly
+} else {
+    Write-Output "Skipping HPIA install — not an HP device."
+}
 
 # Variables
 $odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
