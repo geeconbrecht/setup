@@ -142,13 +142,13 @@ function Run-HPIA-InstallCoreOnly {
                 -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent /ReportFolder:$reportFolder" `
                 -PassThru -WindowStyle Hidden
             $process.WaitForExit()
-            Write-Output "HPIA install task completed."
+            Write-Output "✅ HPIA install task completed."
         } catch {
-            Write-Output "Error running HPIA: $_"
+            Write-Output "❌ Error running HPIA: $_"
         }
 
     } else {
-        Write-Output "HPImageAssistant.exe not found at $hpiaPath"
+        Write-Output "⚠️ HPImageAssistant.exe not found at $hpiaPath"
     }
 }
 Run-HPIA-InstallCoreOnly
@@ -369,7 +369,7 @@ $stateFile = "C:\Temp\PostInstall_Rebooted.txt"
 $thisScript = $MyInvocation.MyCommand.Definition
 
 if (Test-Path $stateFile) {
-    Write-Output "`n🟢 Systeem is opnieuw opgestart. Voer post-reboot taken uit..."
+    Write-Output "Systeem is opnieuw opgestart. Voer post-reboot taken uit..."
 
     # -- Verwijder tijdelijk markeringsbestand
     Remove-Item $stateFile -Force -ErrorAction SilentlyContinue
@@ -382,11 +382,11 @@ if (Test-Path $stateFile) {
         Run-HPIA-InstallCoreOnly
     }
 
-    Write-Output "✅ Post-reboot taken voltooid."
+    Write-Output "Post-reboot taken voltooid."
     exit
 }
 else {
-    Write-Output "`n🔁 Voorbereiden op herstart..."
+    Write-Output "Voorbereiden op herstart..."
 
     # Zorg ervoor dat C:\Temp bestaat
     if (!(Test-Path "C:\Temp")) {
