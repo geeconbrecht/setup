@@ -223,7 +223,7 @@ function Show-DesktopIcons {
 }
 
 # Voer de functie uit
-Show-DesktopIcons
+#Show-DesktopIcons
 
 function Set-NoshowDesktopAndTaskbar {
     # Verwijderen van VLC en Edge pictogrammen van het bureaublad
@@ -385,3 +385,49 @@ function Clear-System {
     }
 }
 Clear-System
+
+# Markeringsbestand om te detecteren of we in de post-reboot fase zitten
+$stateFile = "C:\Temp\PostInstall_Rebooted.txt"
+
+# Volledig pad naar het huidige scriptbestand
+$thisScript = $MyInvocation.MyCommand.Definition
+
+if (Test-Path $stateFile) {
+    Write-Output "`n🟢 Systeem is opnieuw opgestart. Voer post-reboot taken uit..."
+
+    # -- Verwijder tijdelijk markeringsbestand
+    Remove-Item $stateFile -Force -ErrorAction SilentlyContinue
+
+    # -- Herhaal Windows Update
+    Test-AndInstallUpdates
+
+    # -- Herhaal HPIA indien HP
+    if (Is-HPDevice) {
+        Run-HPIA-InstallCoreOnly
+    }
+
+    Write-Output "✅ Post-reboot taken voltooid."
+    exit
+}
+else {
+    Write-Output "`n🔁 Voorbereiden op herstart..."
+
+    # Zorg ervoor dat C:\Temp bestaat
+    if (!(Test-Path "C:\Temp")) {
+        New-Item -Path "C:\Temp" -ItemType Directory | Out-Null
+    }
+
+    # Sla een marker op zodat we weten dat we rebooten
+    Set-Content -Path $stateFile -Value "pending"
+
+    # Maak een Scheduled Task aan die éénmalig dit script opnieuw uitvoert na reboot
+    $taskName = "ResumeAfterReboot"
+    $escapedScript = "`"$thisScript`""
+    $taskCmd = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File $escapedScript"
+
+    schtasks /Create /TN $taskName /TR $taskCmd /SC ONCE /RL HIGHEST /ST 00:00 /F | Out-Null
+    schtasks /Run /TN $taskName | Out-Null
+
+    Write-Output "🕒 Script wordt hervat na herstart. Herstart nu..."
+    Restart-Computer -Force
+}
