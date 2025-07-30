@@ -198,33 +198,6 @@ function Set-SystemSettings {
 }
 Set-SystemSettings
 
-
-# pictogrammen desktop
-function Show-DesktopIcons {
-    $desktopIcons = @{
-        "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" = 0  # Deze computer
-        "{645FF040-5081-101B-9F08-00AA002F954E}" = 0  # Prullenbak
-        "{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}" = 0  # Netwerk
-        "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" = 0  # Gebruikersbestanden
-        "{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}" = 0  # Configuratiescherm
-    }
-
-    # Registry-pad voor bureaubladpictogrammen
-    $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
-
-    # Instellen van de zichtbaarheid van pictogrammen
-    foreach ($guid in $desktopIcons.Keys) {
-        Set-ItemProperty -Path $regPath -Name $guid -Value $desktopIcons[$guid] -Force
-    }
-
-    # Bureaublad vernieuwen
-    rundll32.exe shell32.dll,Control_RunDLL desk.cpl,0
-    Write-Output "Bureaubladpictogrammen bijgewerkt."
-}
-
-# Voer de functie uit
-#Show-DesktopIcons
-
 function Set-NoshowDesktopAndTaskbar {
     # Verwijderen van VLC en Edge pictogrammen van het bureaublad
     $desktopPath = [Environment]::GetFolderPath("Desktop")
