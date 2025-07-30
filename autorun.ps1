@@ -136,19 +136,22 @@ function Run-HPIA-InstallCoreOnly {
 
     if (Test-Path $hpiaPath) {
         Write-Output "Running HPIA to install BIOS, Drivers, Firmware, Security, and Diagnostics only..."
-        Start-Process -FilePath $hpiaPath `
-            -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent" `
-            -Wait
+
+        try {
+            $process = Start-Process -FilePath $hpiaPath `
+                -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent /ReportFolder:$reportFolder" `
+                -PassThru -WindowStyle Hidden
+            $process.WaitForExit()
+            Write-Output "✅ HPIA install task completed."
+        } catch {
+            Write-Output "❌ Error running HPIA: $_"
+        }
+
     } else {
-        Write-Output "HPImageAssistant.exe not found at $hpiaPath"
+        Write-Output "⚠️ HPImageAssistant.exe not found at $hpiaPath"
     }
 }
-if (Is-HPDevice) {
-    Run-HPIA-InstallCoreOnly
-} else {
-    Write-Output "Skipping HPIA install — not an HP device."
-}
-
+Run-HPIA-InstallCoreOnly
 # Variables
 $odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
 $odtExe = "$env:TEMP\ODTSetup.exe"
