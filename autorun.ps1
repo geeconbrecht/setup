@@ -142,13 +142,13 @@ function Run-HPIA-InstallCoreOnly {
                 -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent /ReportFolder:$reportFolder" `
                 -PassThru -WindowStyle Hidden
             $process.WaitForExit()
-            Write-Output "✅ HPIA install task completed."
+            Write-Output "HPIA install task completed."
         } catch {
-            Write-Output "❌ Error running HPIA: $_"
+            Write-Output "Error running HPIA: $_"
         }
 
     } else {
-        Write-Output "⚠️ HPImageAssistant.exe not found at $hpiaPath"
+        Write-Output "HPImageAssistant.exe not found at $hpiaPath"
     }
 }
 Run-HPIA-InstallCoreOnly
@@ -404,6 +404,6 @@ else {
     schtasks /Create /TN $taskName /TR $taskCmd /SC ONCE /RL HIGHEST /ST 00:00 /F | Out-Null
     schtasks /Run /TN $taskName | Out-Null
 
-    Write-Output "🕒 Script wordt hervat na herstart. Herstart nu..."
+    Write-Output "Script wordt hervat na herstart. Herstart nu..."
     Restart-Computer -Force
 }
