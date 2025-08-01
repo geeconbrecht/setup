@@ -8,14 +8,35 @@ function Confirm-Administrator {
 }
 Confirm-Administrator
 
-# Get serial number
-$SerialNumber = (Get-WmiObject -Class Win32_BIOS).SerialNumber
+# Functie om een gebruiker toe te voegen
+function Add-LocalAdminUser {
+    param (
+        [string]$Username = "Admin",
+        [string]$Password = "L0c@l"
+    )
 
-# Format new computer name
-$NewPCName = "LT-SSC-$SerialNumber"
+    $SecurePassword = $Password | ConvertTo-SecureString -AsPlainText -Force
+    $userExists = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
 
-# Rename the computer
-Rename-Computer -NewName $NewPCName -Force
+    if ($userExists) {
+        Write-Output "User '$Username' already exists."
+    } else {
+        try {
+            New-LocalUser -Name $Username -Password $SecurePassword -FullName "Admin" -Description "Local Admin User" -PasswordNeverExpires -UserMayNotChangePassword
+            Add-LocalGroupMember -Group "Administrators" -Member $Username
+            Write-Output "User '$Username' has been created and added to the Administrators group."
+        } catch {
+            Write-Output "Error creating user: $_"
+        }
+    }
+}
+Add-LocalAdminUser -Username "Admin" -Password "L0c@l"
+
+function Is-HPDevice {
+    $manufacturer = (Get-WmiObject -Class Win32_ComputerSystem).Manufacturer
+    return $manufacturer -like "*Hewlett-Packard*" -or $manufacturer -like "*HP*"
+}
+
 # Functie om registerwaarden in te stellen
 function Set-RegistryValues {
     $registryChanges = @{
@@ -70,9 +91,11 @@ function Test-Configure-Chocolatey {
 
     Start-Sleep -Seconds 5
 
+    # Common packages for all systems
     $packages = @(
-        "googlechrome", "adobereader", 
-        "eid-belgium", "eid-belgium-viewer", "hpimageassistant", "hpsupportassistant", "1password", "citrix-receiver", "openvpn", "javaruntime"
+        "greenshot", "googlechrome", "adobereader", 
+        "eid-belgium", "eid-belgium-viewer", "winrar",
+        "javaruntime", "firefox"
     )
 
     foreach ($package in $packages) {
@@ -84,63 +107,24 @@ function Test-Configure-Chocolatey {
             Write-Output "Error installing package: $_"
         }
     }
-}
-Test-Configure-Chocolatey
 
-function Install-TeamViewer14 {
-    param (
-        [string]$DownloadUrl = "https://download.teamviewer.com/download/version_14x/TeamViewer_Setup.exe",
-        [string]$InstallerPath = "$env:TEMP\TeamViewer_Setup.exe"
-    )
+    # HP-specific packages
+    if (Is-HPDevice) {
+        Write-Output "HP system detected. Installing HP-specific tools..."
 
-    Write-Host "Downloading TeamViewer 14 from $DownloadUrl..."
-
-    try {
-        # Download the installer
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
-        Write-Host "Download completed: $InstallerPath"
-
-        # Install silently
-        Write-Host "Starting silent installation..."
-        Start-Process -FilePath $InstallerPath -ArgumentList "/S" -Wait -NoNewWindow
-
-        Write-Host "TeamViewer 14 installed successfully."
-    }
-    catch {
-        Write-Error "Installation failed: $_"
-    }
-    finally {
-        # Optional: Clean up the installer
-        if (Test-Path $InstallerPath) {
-            Remove-Item $InstallerPath -Force
-            Write-Host "Cleaned up installer."
+        try {
+            choco install hpimageassistant -y --force --ignore-checksums
+            choco install hpsupportassistant -y --params "/S /L=1033" --force
+            Write-Output "HP packages installed successfully."
+        } catch {
+            Write-Output "Error installing HP packages: $_"
         }
+    } else {
+        Write-Output "Non-HP system detected. Skipping HP-specific installations."
     }
 }
 
-Install-TeamViewer14
-
-function Install-CustomSoftware {
-    param (
-        [string]$DownloadUrl = "https://geecon.be/Mint/Agent.exe",  # Replace with your link
-        [string]$DestinationPath = "$env:TEMP\Installer.exe"
-    )
-
-    try {
-        Write-Host "Downloading installer from WeTransfer..."
-        Invoke-WebRequest -Uri $DownloadUrl -OutFile $DestinationPath -UseBasicParsing
-
-        Write-Host "Starting silent installation..."
-        Start-Process -FilePath $DestinationPath -ArgumentList "/silent" -Wait -NoNewWindow
-
-        Write-Host "Installation completed."
-    }
-    catch {
-        Write-Error "Error during install: $_"
-    }
-}
-
-Install-CustomSoftware
+Test-Configure-Chocolatey
 
 function Run-HPIA-InstallCoreOnly {
     $hpiaPath = "C:\ProgramData\chocolatey\lib\hpimageassistant\tools\HPImageAssistant.exe"
@@ -152,15 +136,22 @@ function Run-HPIA-InstallCoreOnly {
 
     if (Test-Path $hpiaPath) {
         Write-Output "Running HPIA to install BIOS, Drivers, Firmware, Security, and Diagnostics only..."
-        Start-Process -FilePath $hpiaPath `
-            -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent" `
-            -Wait
+
+        try {
+            $process = Start-Process -FilePath $hpiaPath `
+                -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent /ReportFolder:$reportFolder" `
+                -PassThru -WindowStyle Hidden
+            $process.WaitForExit()
+            Write-Output "HPIA install task completed."
+        } catch {
+            Write-Output "Error running HPIA: $_"
+        }
+
     } else {
         Write-Output "HPImageAssistant.exe not found at $hpiaPath"
     }
 }
 Run-HPIA-InstallCoreOnly
-
 # Variables
 $odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
 $odtExe = "$env:TEMP\ODTSetup.exe"
@@ -210,47 +201,22 @@ function Set-SystemSettings {
 }
 Set-SystemSettings
 
-
-# pictogrammen desktop
-function Show-DesktopIcons {
-    $desktopIcons = @{
-        "{20D04FE0-3AEA-1069-A2D8-08002B30309D}" = 0  # Deze computer
-        "{645FF040-5081-101B-9F08-00AA002F954E}" = 0  # Prullenbak
-        "{F02C1A0D-BE21-4350-88B0-7367FC96EF3C}" = 0  # Netwerk
-        "{59031a47-3f72-44a7-89c5-5595fe6b30ee}" = 0  # Gebruikersbestanden
-        "{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}" = 0  # Configuratiescherm
-    }
-
-    # Registry-pad voor bureaubladpictogrammen
-    $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
-
-    # Instellen van de zichtbaarheid van pictogrammen
-    foreach ($guid in $desktopIcons.Keys) {
-        Set-ItemProperty -Path $regPath -Name $guid -Value $desktopIcons[$guid] -Force
-    }
-
-    # Bureaublad vernieuwen
-    rundll32.exe shell32.dll,Control_RunDLL desk.cpl,0
-    Write-Output "Bureaubladpictogrammen bijgewerkt."
-}
-
-# Voer de functie uit
-Show-DesktopIcons
-
 function Set-NoshowDesktopAndTaskbar {
-    # Verwijderen van VLC en Edge pictogrammen van het bureaublad
+    # Verwijderen van VLC, Edge, TeamViewer en HP Support Assistant pictogrammen van het bureaublad
     $desktopPath = [Environment]::GetFolderPath("Desktop")
-    $vlcShortcut = Join-Path -Path $desktopPath -ChildPath "VLC media player.lnk"
-    $edgeShortcut = Join-Path -Path $desktopPath -ChildPath "Microsoft Edge.lnk"
+    $shortcuts = @(
+        "VLC media player.lnk",
+        "Microsoft Edge.lnk",
+        "TeamViewer.lnk",
+        "HP Support Assistant.lnk"
+    )
 
-    if (Test-Path $vlcShortcut) {
-        Remove-Item -Path $vlcShortcut -Force
-        Write-Output "VLC shortcut removed from desktop."
-    }
-
-    if (Test-Path $edgeShortcut) {
-        Remove-Item -Path $edgeShortcut -Force
-        Write-Output "Edge shortcut removed from desktop."
+    foreach ($shortcut in $shortcuts) {
+        $shortcutPath = Join-Path -Path $desktopPath -ChildPath $shortcut
+        if (Test-Path $shortcutPath) {
+            Remove-Item -Path $shortcutPath -Force
+            Write-Output "$shortcut removed from desktop."
+        }
     }
 
     # Verwijderen van ongewenste apps uit de taakbalk
@@ -299,6 +265,49 @@ function Disable-IPv6 {
 }
 Disable-IPv6
 
+#greenshot config files omwisselen
+
+$scriptDirectory = Split-Path -Path $MyInvocation.MyCommand.Path
+
+# Verkrijg het pad naar de Roaming AppData map van de huidige gebruiker
+$appDataPath = [Environment]::GetFolderPath("ApplicationData")
+$greenshotPath = Join-Path -Path $appDataPath -ChildPath "Greenshot"
+
+# Controleer of de Greenshot map bestaat
+if (Test-Path -Path $greenshotPath) {
+    try {
+        # Pad naar de huidige en nieuwe configuratiebestanden
+        $sourceConfigPath = Join-Path -Path $scriptDirectory -ChildPath "Greenshot2.ini"
+        $oldConfigPath = Join-Path -Path $greenshotPath -ChildPath "Greenshot.ini"
+        $newConfigPath = Join-Path -Path $greenshotPath -ChildPath "Greenshot2.ini"
+
+        # Controleer of Greenshot2.ini bestaat in de scriptmap
+        if (-Not (Test-Path -Path $sourceConfigPath)) {t
+            Write-Output "Greenshot2.ini not found in script directory: $scriptDirectory"
+            exit 1
+        }
+
+        # Kopieer Greenshot2.ini naar de Greenshot-map in AppData
+        Copy-Item -Path $sourceConfigPath -Destination $greenshotPath -Force
+        Write-Output "Greenshot2.ini copied to Greenshot folder."
+
+        # Verwijder de oude configuratie (Greenshot.ini) als deze bestaat
+        if (Test-Path -Path $oldConfigPath) {
+            Remove-Item -Path $oldConfigPath -Force
+            Write-Output "Old Greenshot.ini removed."
+        }
+
+        # Hernoem de nieuwe configuratie naar Greenshot.ini
+        Rename-Item -Path $newConfigPath -NewName "Greenshot.ini"
+        Write-Output "Greenshot2.ini renamed to Greenshot.ini."
+
+    } catch {
+        Write-Output "Error processing Greenshot configuration: $_"
+    }
+} else {
+    Write-Output "Greenshot folder does not exist in AppData."
+}
+
 
 function Install-PSWindowsUpdateModule {
     # Ensure NuGet is available without prompting
@@ -337,6 +346,7 @@ function Test-AndInstallUpdates {
 }
 Test-AndInstallUpdates
 
+
 # Functie voor schijfopruiming
 function Clear-System {
     try {
@@ -353,3 +363,49 @@ function Clear-System {
     }
 }
 Clear-System
+
+# Markeringsbestand om te detecteren of we in de post-reboot fase zitten
+$stateFile = "C:\Temp\PostInstall_Rebooted.txt"
+
+# Volledig pad naar het huidige scriptbestand
+$thisScript = $MyInvocation.MyCommand.Definition
+
+if (Test-Path $stateFile) {
+    Write-Output "Systeem is opnieuw opgestart. Voer post-reboot taken uit..."
+
+    # -- Verwijder tijdelijk markeringsbestand
+    Remove-Item $stateFile -Force -ErrorAction SilentlyContinue
+
+    # -- Herhaal Windows Update
+    Test-AndInstallUpdates
+
+    # -- Herhaal HPIA indien HP
+    if (Is-HPDevice) {
+        Run-HPIA-InstallCoreOnly
+    }
+
+    Write-Output "Post-reboot taken voltooid."
+    exit
+}
+else {
+    Write-Output "Voorbereiden op herstart..."
+
+    # Zorg ervoor dat C:\Temp bestaat
+    if (!(Test-Path "C:\Temp")) {
+        New-Item -Path "C:\Temp" -ItemType Directory | Out-Null
+    }
+
+    # Sla een marker op zodat we weten dat we rebooten
+    Set-Content -Path $stateFile -Value "pending"
+
+    # Maak een Scheduled Task aan die éénmalig dit script opnieuw uitvoert na reboot
+    $taskName = "ResumeAfterReboot"
+    $escapedScript = "`"$thisScript`""
+    $taskCmd = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File $escapedScript"
+
+    schtasks /Create /TN $taskName /TR $taskCmd /SC ONCE /RL HIGHEST /ST 00:00 /F | Out-Null
+    schtasks /Run /TN $taskName | Out-Null
+
+    Write-Output "Script wordt hervat na herstart. Herstart nu..."
+    Restart-Computer -Force
+}
