@@ -126,66 +126,159 @@ function Test-Configure-Chocolatey {
 
 Test-Configure-Chocolatey
 
-function Run-HPIA-InstallCoreOnly {
-    $hpiaPath = "C:\ProgramData\chocolatey\lib\hpimageassistant\tools\HPImageAssistant.exe"
-    $reportFolder = "C:\HPIA\Reports"
+#requires -Version 5.1
+function Install-OfficeFromOdt {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter()] [string] $DownloadUrlOdt    = "https://geecon.be/voorbereiding/office.exe",
+        [Parameter()] [string] $DownloadUrlConfig = "https://geecon.be/voorbereiding/Configuratie.xml",
+        [Parameter()] [string] $OdtExtractPath    = "C:\OfficeDeploymentTool",
+        [Parameter()] [string] $TempPath          = $env:TEMP,
+        [Parameter()] [string] $ConfigFileName    = "Configuratie.xml",
+        [switch] $DownloadOnly,
+        [switch] $InstallOnly,
+        [switch] $ForceRedownload,
+        [bool]   $RequireAdmin = $true
+    )
 
-    if (!(Test-Path $reportFolder)) {
-        New-Item -Path $reportFolder -ItemType Directory -Force | Out-Null
-    }
-
-    if (Test-Path $hpiaPath) {
-        Write-Output "Running HPIA to install BIOS, Drivers, Firmware, Security, and Diagnostics only..."
-
-        try {
-            $process = Start-Process -FilePath $hpiaPath `
-                -ArgumentList "/Operation:Analyze /Action:Install /Category:BIOS,Drivers,Firmware,Accessories /Silent /ReportFolder:$reportFolder" `
-                -PassThru -WindowStyle Hidden
-            $process.WaitForExit()
-            Write-Output "✅ HPIA install task completed."
-        } catch {
-            Write-Output "❌ Error running HPIA: $_"
+    try {
+        # --- Admin-check (optioneel) ---
+        if ($RequireAdmin) {
+            $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+            $p  = [Security.Principal.WindowsPrincipal] $id
+            if (-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+                throw "Administratorrechten vereist. Start PowerShell als Administrator of zet -RequireAdmin:$false (op eigen risico)."
+            }
         }
 
-    } else {
-        Write-Output "⚠️ HPImageAssistant.exe not found at $hpiaPath"
+        if ($DownloadOnly -and $InstallOnly) {
+            throw "Gebruik niet zowel -DownloadOnly als -InstallOnly."
+        }
+
+        # --- Paden ---
+        $odtExe     = Join-Path $TempPath 'ODTSetup.exe'
+        $setupExe   = Join-Path $OdtExtractPath 'setup.exe'
+        $configPath = Join-Path $OdtExtractPath $ConfigFileName
+
+        # --- Voorbereiding map ---
+        if (-not (Test-Path $OdtExtractPath)) {
+            Write-Verbose "Aanmaken map: $OdtExtractPath"
+            New-Item -Path $OdtExtractPath -ItemType Directory | Out-Null
+        }
+
+        # --- (Her)download ODT en uitpakken ---
+        if ($ForceRedownload -or -not (Test-Path $setupExe)) {
+            if ($PSCmdlet.ShouldProcess("Office Deployment Tool", "Download & extract")) {
+                Write-Verbose "Downloaden ODT: $DownloadUrlOdt -> $odtExe"
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+                Invoke-WebRequest -Uri $DownloadUrlOdt -OutFile $odtExe -UseBasicParsing -ErrorAction Stop
+                if (-not (Test-Path $odtExe) -or ((Get-Item $odtExe).Length -lt 1024)) {
+                    throw "ODT download is mislukt of bestand is corrupt: $odtExe"
+                }
+
+                Write-Verbose "Uitpakken ODT naar $OdtExtractPath"
+                $p = Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:`"$OdtExtractPath`"" -PassThru -WindowStyle Hidden
+                $p.WaitForExit()
+                if ($p.ExitCode -ne 0) { throw "Uitpakken ODT mislukt met exitcode $($p.ExitCode)" }
+
+                if (-not (Test-Path $setupExe)) {
+                    throw "setup.exe niet gevonden na uitpakken: $setupExe"
+                }
+            }
+        } else {
+            Write-Verbose "ODT al aanwezig: $setupExe"
+        }
+
+        # --- (Her)download configuratie ---
+        if ($ForceRedownload -or -not (Test-Path $configPath)) {
+            if ($PSCmdlet.ShouldProcess("Configuratie", "Download naar $configPath")) {
+                Write-Verbose "Downloaden configuratie: $DownloadUrlConfig -> $configPath"
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+                Invoke-WebRequest -Uri $DownloadUrlConfig -OutFile $configPath -UseBasicParsing -ErrorAction Stop
+                if (-not (Test-Path $configPath) -or ((Get-Item $configPath).Length -lt 64)) {
+                    throw "Configuratiebestand lijkt niet correct: $configPath"
+                }
+            }
+        } else {
+            Write-Verbose "Configuratie al aanwezig: $configPath"
+        }
+
+        if (-not (Test-Path $configPath)) {
+            throw "Configuratiebestand ontbreekt: $configPath"
+        }
+
+        # --- Downloadfase (/download) ---
+        if (-not $InstallOnly) {
+            if ($PSCmdlet.ShouldProcess("Office content", "ODT /download met $ConfigFileName")) {
+                Write-Verbose "ODT /download starten..."
+                $p = Start-Process -FilePath $setupExe -ArgumentList "/download `"$ConfigFileName`"" -WorkingDirectory $OdtExtractPath -PassThru -WindowStyle Hidden
+                $p.WaitForExit()
+                if ($p.ExitCode -ne 0) { throw "ODT /download faalde met exitcode $($p.ExitCode)" }
+            }
+        }
+
+        # --- Installatiefase (/configure) ---
+        if (-not $DownloadOnly) {
+            if ($PSCmdlet.ShouldProcess("Office installatie", "ODT /configure met $ConfigFileName")) {
+                Write-Verbose "ODT /configure starten..."
+                $p = Start-Process -FilePath $setupExe -ArgumentList "/configure `"$ConfigFileName`"" -WorkingDirectory $OdtExtractPath -PassThru -WindowStyle Hidden
+                $p.WaitForExit()
+                if ($p.ExitCode -ne 0) { throw "ODT /configure faalde met exitcode $($p.ExitCode)" }
+            }
+        }
+
+        # --- Resultaat ---
+        [pscustomobject]@{
+            OdtPath       = $OdtExtractPath
+            SetupExe      = $setupExe
+            ConfigPath    = $configPath
+            DownloadedODT = (Test-Path $setupExe)
+            DownloadedCfg = (Test-Path $configPath)
+            CompletedAt   = (Get-Date)
+        }
+    }
+    catch {
+        Write-Error $_.Exception.Message
+        throw  # Laat de fout doorbubbelen voor calling script / logging
     }
 }
-Run-HPIA-InstallCoreOnly
-# Variables
-$odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
-$odtExe = "$env:TEMP\ODTSetup.exe"
-$odtExtractPath = "C:\OfficeDeploymentTool"
-$configFile = "$odtExtractPath\configuration-Office365-x64.xml"  # Adjust path if your Office.xml is elsewhere
 
-# Download Office Deployment Tool
-Write-Host "Downloading Office Deployment Tool..."
-Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe
 
-# Create extract directory
-If (!(Test-Path $odtExtractPath)) {
-    New-Item -Path $odtExtractPath -ItemType Directory | Out-Null
-}
 
-# Extract the Deployment Tool
-Write-Host "Extracting Deployment Tool..."
-Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:$odtExtractPath" -Wait
+# # Variables
+# $odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
+# $odtExe = "$env:TEMP\ODTSetup.exe"
+# $odtExtractPath = "C:\OfficeDeploymentTool"
+# $configFile = "$odtExtractPath\configuration-Office365-x64.xml"  # Adjust path if your Office.xml is elsewhere
 
-# Copy Office.xml to the directory (or ensure it’s already there)
-If (!(Test-Path $configFile)) {
-    Write-Host "ERROR: Office.xml not found at $configFile"
-    Exit 1
-}
+# # Download Office Deployment Tool
+# Write-Host "Downloading Office Deployment Tool..."
+# Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe
 
-# Run the download step
-Write-Host "Downloading Office365..."
-Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/download configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
+# # Create extract directory
+# If (!(Test-Path $odtExtractPath)) {
+#     New-Item -Path $odtExtractPath -ItemType Directory | Out-Null
+# }
 
-# Run the install step
-Write-Host "Installing Office365..."
-Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
+# # Extract the Deployment Tool
+# Write-Host "Extracting Deployment Tool..."
+# Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:$odtExtractPath" -Wait
 
-Write-Host "Office365 installation complete!"
+# # Copy Office.xml to the directory (or ensure it’s already there)
+# If (!(Test-Path $configFile)) {
+#     Write-Host "ERROR: Office.xml not found at $configFile"
+#     Exit 1
+# }
+
+# # Run the download step
+# Write-Host "Downloading Office365..."
+# Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/download configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
+
+# # Run the install step
+# Write-Host "Installing Office365..."
+# Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
+
+# Write-Host "Office365 installation complete!"
 
 
 # Functie voor instellingen
@@ -202,19 +295,21 @@ function Set-SystemSettings {
 Set-SystemSettings
 
 function Set-NoshowDesktopAndTaskbar {
-    # Verwijderen van VLC en Edge pictogrammen van het bureaublad
+    # Verwijderen van VLC, Edge, TeamViewer en HP Support Assistant pictogrammen van het bureaublad
     $desktopPath = [Environment]::GetFolderPath("Desktop")
-    $vlcShortcut = Join-Path -Path $desktopPath -ChildPath "VLC media player.lnk"
-    $edgeShortcut = Join-Path -Path $desktopPath -ChildPath "Microsoft Edge.lnk"
+    $shortcuts = @(
+        "VLC media player.lnk",
+        "Microsoft Edge.lnk",
+        "TeamViewer.lnk",
+        "HP Support Assistant.lnk"
+    )
 
-    if (Test-Path $vlcShortcut) {
-        Remove-Item -Path $vlcShortcut -Force
-        Write-Output "VLC shortcut removed from desktop."
-    }
-
-    if (Test-Path $edgeShortcut) {
-        Remove-Item -Path $edgeShortcut -Force
-        Write-Output "Edge shortcut removed from desktop."
+    foreach ($shortcut in $shortcuts) {
+        $shortcutPath = Join-Path -Path $desktopPath -ChildPath $shortcut
+        if (Test-Path $shortcutPath) {
+            Remove-Item -Path $shortcutPath -Force
+            Write-Output "$shortcut removed from desktop."
+        }
     }
 
     # Verwijderen van ongewenste apps uit de taakbalk
