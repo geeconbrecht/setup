@@ -125,123 +125,61 @@ function Test-Configure-Chocolatey {
 }
 
 Test-Configure-Chocolatey
+# ===========================================
+# Office Deployment Tool + Remote XML (Geecon)
+# ===========================================
 
-#requires -Version 5.1
-function Install-OfficeFromOdt {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param(
-        [Parameter()] [string] $DownloadUrlOdt    = "https://geecon.be/voorbereiding/office.exe",
-        [Parameter()] [string] $DownloadUrlConfig = "https://geecon.be/voorbereiding/Configuratie.xml",
-        [Parameter()] [string] $OdtExtractPath    = "C:\OfficeDeploymentTool",
-        [Parameter()] [string] $TempPath          = $env:TEMP,
-        [Parameter()] [string] $ConfigFileName    = "Configuratie.xml",
-        [switch] $DownloadOnly,
-        [switch] $InstallOnly,
-        [switch] $ForceRedownload,
-        [bool]   $RequireAdmin = $true
-    )
+# --- Settings ---
+$xmlUrl          = "https://geecon.be/voorbereiding/Configuratie.xml"
+$odtUrl          = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
+$odtExe          = Join-Path $env:TEMP "ODTSetup.exe"
+$odtExtractPath  = "C:\OfficeDeploymentTool"
+$configFile      = Join-Path $odtExtractPath "Configuratie.xml"  # saved filename
 
-    try {
-        # --- Admin-check (optioneel) ---
-        if ($RequireAdmin) {
-            $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-            $p  = [Security.Principal.WindowsPrincipal] $id
-            if (-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-                throw "Administratorrechten vereist. Start PowerShell als Administrator of zet -RequireAdmin:$false (op eigen risico)."
-            }
-        }
-
-        if ($DownloadOnly -and $InstallOnly) {
-            throw "Gebruik niet zowel -DownloadOnly als -InstallOnly."
-        }
-
-        # --- Paden ---
-        $odtExe     = Join-Path $TempPath 'ODTSetup.exe'
-        $setupExe   = Join-Path $OdtExtractPath 'setup.exe'
-        $configPath = Join-Path $OdtExtractPath $ConfigFileName
-
-        # --- Voorbereiding map ---
-        if (-not (Test-Path $OdtExtractPath)) {
-            Write-Verbose "Aanmaken map: $OdtExtractPath"
-            New-Item -Path $OdtExtractPath -ItemType Directory | Out-Null
-        }
-
-        # --- (Her)download ODT en uitpakken ---
-        if ($ForceRedownload -or -not (Test-Path $setupExe)) {
-            if ($PSCmdlet.ShouldProcess("Office Deployment Tool", "Download & extract")) {
-                Write-Verbose "Downloaden ODT: $DownloadUrlOdt -> $odtExe"
-                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-                Invoke-WebRequest -Uri $DownloadUrlOdt -OutFile $odtExe -UseBasicParsing -ErrorAction Stop
-                if (-not (Test-Path $odtExe) -or ((Get-Item $odtExe).Length -lt 1024)) {
-                    throw "ODT download is mislukt of bestand is corrupt: $odtExe"
-                }
-
-                Write-Verbose "Uitpakken ODT naar $OdtExtractPath"
-                $p = Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:`"$OdtExtractPath`"" -PassThru -WindowStyle Hidden
-                $p.WaitForExit()
-                if ($p.ExitCode -ne 0) { throw "Uitpakken ODT mislukt met exitcode $($p.ExitCode)" }
-
-                if (-not (Test-Path $setupExe)) {
-                    throw "setup.exe niet gevonden na uitpakken: $setupExe"
-                }
-            }
-        } else {
-            Write-Verbose "ODT al aanwezig: $setupExe"
-        }
-
-        # --- (Her)download configuratie ---
-        if ($ForceRedownload -or -not (Test-Path $configPath)) {
-            if ($PSCmdlet.ShouldProcess("Configuratie", "Download naar $configPath")) {
-                Write-Verbose "Downloaden configuratie: $DownloadUrlConfig -> $configPath"
-                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-                Invoke-WebRequest -Uri $DownloadUrlConfig -OutFile $configPath -UseBasicParsing -ErrorAction Stop
-                if (-not (Test-Path $configPath) -or ((Get-Item $configPath).Length -lt 64)) {
-                    throw "Configuratiebestand lijkt niet correct: $configPath"
-                }
-            }
-        } else {
-            Write-Verbose "Configuratie al aanwezig: $configPath"
-        }
-
-        if (-not (Test-Path $configPath)) {
-            throw "Configuratiebestand ontbreekt: $configPath"
-        }
-
-        # --- Downloadfase (/download) ---
-        if (-not $InstallOnly) {
-            if ($PSCmdlet.ShouldProcess("Office content", "ODT /download met $ConfigFileName")) {
-                Write-Verbose "ODT /download starten..."
-                $p = Start-Process -FilePath $setupExe -ArgumentList "/download `"$ConfigFileName`"" -WorkingDirectory $OdtExtractPath -PassThru -WindowStyle Hidden
-                $p.WaitForExit()
-                if ($p.ExitCode -ne 0) { throw "ODT /download faalde met exitcode $($p.ExitCode)" }
-            }
-        }
-
-        # --- Installatiefase (/configure) ---
-        if (-not $DownloadOnly) {
-            if ($PSCmdlet.ShouldProcess("Office installatie", "ODT /configure met $ConfigFileName")) {
-                Write-Verbose "ODT /configure starten..."
-                $p = Start-Process -FilePath $setupExe -ArgumentList "/configure `"$ConfigFileName`"" -WorkingDirectory $OdtExtractPath -PassThru -WindowStyle Hidden
-                $p.WaitForExit()
-                if ($p.ExitCode -ne 0) { throw "ODT /configure faalde met exitcode $($p.ExitCode)" }
-            }
-        }
-
-        # --- Resultaat ---
-        [pscustomobject]@{
-            OdtPath       = $OdtExtractPath
-            SetupExe      = $setupExe
-            ConfigPath    = $configPath
-            DownloadedODT = (Test-Path $setupExe)
-            DownloadedCfg = (Test-Path $configPath)
-            CompletedAt   = (Get-Date)
-        }
-    }
-    catch {
-        Write-Error $_.Exception.Message
-        throw  # Laat de fout doorbubbelen voor calling script / logging
-    }
+# --- Prep: ensure TLS 1.2 and admin ---
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "Please run PowerShell as Administrator." -ForegroundColor Yellow
+    exit 1
 }
+
+# --- Download ODT ---
+Write-Host "Downloading Office Deployment Tool..." -ForegroundColor Cyan
+Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe -UseBasicParsing
+
+# --- Create / clean extract directory ---
+if (!(Test-Path $odtExtractPath)) { New-Item -Path $odtExtractPath -ItemType Directory | Out-Null }
+
+# --- Extract ODT ---
+Write-Host "Extracting Office Deployment Tool to $odtExtractPath ..." -ForegroundColor Cyan
+Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:`"$odtExtractPath`"" -Wait
+
+# --- Download your configuration XML ---
+Write-Host "Downloading configuration XML from $xmlUrl ..." -ForegroundColor Cyan
+Invoke-WebRequest -Uri $xmlUrl -OutFile $configFile -UseBasicParsing
+
+if (!(Test-Path $configFile)) {
+    Write-Host "ERROR: Failed to download configuration XML to $configFile" -ForegroundColor Red
+    exit 1
+}
+
+# --- Paths ---
+$setupExe = Join-Path $odtExtractPath "setup.exe"
+if (!(Test-Path $setupExe)) {
+    Write-Host "ERROR: setup.exe not found in $odtExtractPath" -ForegroundColor Red
+    exit 1
+}
+
+# --- Download Office payload as defined by XML ---
+Write-Host "ODT: Downloading Office files (this can take a while)..." -ForegroundColor Cyan
+Start-Process -FilePath $setupExe -ArgumentList "/download `"$configFile`"" -WorkingDirectory $odtExtractPath -Wait
+
+# --- Install Office as defined by XML ---
+Write-Host "ODT: Installing Office with your configuration..." -ForegroundColor Cyan
+Start-Process -FilePath $setupExe -ArgumentList "/configure `"$configFile`"" -WorkingDirectory $odtExtractPath -Wait
+
+Write-Host "✔ Office installation complete." -ForegroundColor Green
 
 
 
