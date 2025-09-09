@@ -437,6 +437,6 @@ else {
     schtasks /Create /TN $taskName /TR $taskCmd /SC ONCE /RL HIGHEST /ST 00:00 /F | Out-Null
     schtasks /Run /TN $taskName | Out-Null
 
-    Write-Output "Script wordt hervat na herstart. Herstart nu..."
-    Restart-Computer -Force
+    #Write-Output "Script wordt hervat na herstart. Herstart nu..."
+    #Restart-Computer -Force
 }
