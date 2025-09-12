@@ -1,10 +1,9 @@
 # ===========================================
-#  Elevatie naar Administrator (robuust)
+#  Elevatie naar Administrator (robuust, 1 regel typecast)
 # ===========================================
 function Confirm-Administrator {
-    if (-not ([Security.Principal.WindowsPrincipal]
-        [Security.Principal.WindowsIdentity]::GetCurrent()
-    ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+        ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 
         $exe  = (Get-Process -Id $PID).Path
         $args = @('-NoProfile','-ExecutionPolicy','Bypass','-File', "`"$PSCommandPath`"") +
@@ -83,7 +82,7 @@ Invoke-WebRequest -Uri $url -OutFile $output
 Start-Process -FilePath $output -ArgumentList "/silent" -Wait
 
 # ===========================================
-#  Chocolatey + pakketten (zonder ignore-checksums)
+#  Chocolatey + pakketten (zonder --ignore-checksums)
 # ===========================================
 function Test-Configure-Chocolatey {
     $chocoInstalled = Get-Command choco -ErrorAction SilentlyContinue
@@ -116,7 +115,7 @@ function Test-Configure-Chocolatey {
             choco install $package -y --force
             Write-Output "$package installed successfully."
         } catch {
-            Write-Output "Error installing $package: $_"
+            Write-Output "Error installing $($package): $_"
         }
     }
 
@@ -217,3 +216,151 @@ function Set-NoshowDesktopAndTaskbar {
     try {
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -Value 1
         Write-Output "Search bar configured to icon-only."
+    } catch {
+        Write-Output "Error configuring search bar: $_"
+    }
+}
+Set-NoshowDesktopAndTaskbar
+
+# ===========================================
+#  IPv6 uitschakelen (alle actieve adapters)
+# ===========================================
+function Disable-IPv6 {
+    try {
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+        foreach ($adapter in $adapters) {
+            Disable-NetAdapterBinding -Name $adapter.Name -ComponentID ms_tcpip6 -Confirm:$false
+        }
+        Write-Output "IPv6 disabled on all active network adapters."
+    } catch {
+        Write-Output "Error disabling IPv6: $_"
+    }
+}
+Disable-IPv6
+
+# ===========================================
+#  Greenshot configuratie vervangen
+# ===========================================
+$scriptDirectory = Split-Path -Path $PSCommandPath
+$appDataPath     = [Environment]::GetFolderPath("ApplicationData")
+$greenshotPath   = Join-Path -Path $appDataPath -ChildPath "Greenshot"
+
+if (Test-Path -Path $greenshotPath) {
+    try {
+        $sourceConfigPath = Join-Path -Path $scriptDirectory -ChildPath "Greenshot2.ini"
+        $oldConfigPath    = Join-Path -Path $greenshotPath -ChildPath "Greenshot.ini"
+        $newConfigPath    = Join-Path -Path $greenshotPath -ChildPath "Greenshot2.ini"
+
+        if (-Not (Test-Path -Path $sourceConfigPath)) {
+            Write-Output "Greenshot2.ini not found in script directory: $scriptDirectory"
+            exit 1
+        }
+
+        Copy-Item -Path $sourceConfigPath -Destination $greenshotPath -Force
+        Write-Output "Greenshot2.ini copied to Greenshot folder."
+
+        if (Test-Path -Path $oldConfigPath) {
+            Remove-Item -Path $oldConfigPath -Force
+            Write-Output "Old Greenshot.ini removed."
+        }
+
+        Rename-Item -Path $newConfigPath -NewName "Greenshot.ini"
+        Write-Output "Greenshot2.ini renamed to Greenshot.ini."
+    } catch {
+        Write-Output "Error processing Greenshot configuration: $_"
+    }
+} else {
+    Write-Output "Greenshot folder does not exist in AppData."
+}
+
+# ===========================================
+#  Windows Update module + updates
+# ===========================================
+function Install-PSWindowsUpdateModule {
+    if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+        Write-Output "Installing NuGet provider silently..."
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+    }
+
+    if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+        try {
+            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser
+            Write-Output "PSWindowsUpdate module installed."
+        } catch {
+            Write-Output "Error installing PSWindowsUpdate: $_"
+        }
+    } else {
+        Write-Output "PSWindowsUpdate module already installed."
+    }
+}
+function Test-AndInstallUpdates {
+    try {
+        Import-Module PSWindowsUpdate
+        $updates = Get-WindowsUpdate -AcceptAll -Verbose
+        if ($updates) {
+            Install-WindowsUpdate -AcceptAll -Verbose
+        } else {
+            Write-Output "No updates available."
+        }
+    } catch {
+        Write-Output "Error updating: $_"
+    }
+}
+Install-PSWindowsUpdateModule
+Test-AndInstallUpdates
+
+# ===========================================
+#  Opruimen
+# ===========================================
+function Clear-System {
+    try {
+        $TempPaths = @("$env:Temp", "C:\Windows\Temp")
+        foreach ($path in $TempPaths) {
+            if (Test-Path $path) {
+                Get-ChildItem -Path $path -Recurse | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+            }
+        }
+        Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+        Write-Output "System cleanup completed."
+    } catch {
+        Write-Output "Error during cleanup: $_"
+    }
+}
+Clear-System
+
+# ===========================================
+#  Reboot & hervatten (RunOnce → geen quote-gedoe)
+# ===========================================
+$stateFile = "C:\Temp\PostInstall_Rebooted.txt"
+$thisScript = $PSCommandPath
+
+if (Test-Path $stateFile) {
+    Write-Output "Systeem is opnieuw opgestart. Voer post-reboot taken uit..."
+
+    Remove-Item $stateFile -Force -ErrorAction SilentlyContinue
+
+    Test-AndInstallUpdates
+
+    if (Is-HPDevice) {
+        # Run-HPIA-InstallCoreOnly   # <-- definieer deze functie of laat uit
+    }
+
+    Write-Output "Post-reboot taken voltooid."
+    exit
+}
+else {
+    Write-Output "Voorbereiden op herstart..."
+
+    if (!(Test-Path "C:\Temp")) {
+        New-Item -Path "C:\Temp" -ItemType Directory | Out-Null
+    }
+
+    Set-Content -Path $stateFile -Value "pending"
+
+    # RunOnce vermijdt alle ingewikkelde quoting
+    $escaped = "`"$PSCommandPath`""
+    New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" `
+      -Name "ResumeAfterReboot" -Value "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File $escaped" -Force | Out-Null
+
+    Restart-Computer -Force
+}
