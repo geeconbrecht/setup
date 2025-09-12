@@ -61,14 +61,14 @@ function Set-RegistryValues {
 Set-RegistryValues
 
 # Define the download URL and destination path
-$url = "https://rmmeu-geeconitsolutions.screenconnect.com/Bin/ScreenConnect.ClientSetup.exe?e=Access&y=Guest"
-$output = "$env:TEMP\ScreenConnect.ClientSetup.exe"
+#$url = "https://rmmeu-geeconitsolutions.screenconnect.com/Bin/ScreenConnect.ClientSetup.exe?e=Access&y=Guest"
+#$output = "$env:TEMP\ScreenConnect.ClientSetup.exe"
 
 # Download the installer
-Invoke-WebRequest -Uri $url -OutFile $output
+#Invoke-WebRequest -Uri $url -OutFile $output
 
 # Run the installer silently
-Start-Process -FilePath $output -ArgumentList "/silent" -Wait
+#Start-Process -FilePath $output -ArgumentList "/silent" -Wait
 
 # Functie om Chocolatey te installeren en pakketten 
 
