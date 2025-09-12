@@ -1,28 +1,20 @@
-# ===========================================
-#  Elevatie naar Administrator (robuust, 1 regel typecast)
-# ===========================================
+# Functie om te controleren of het script als administrator draait
 function Confirm-Administrator {
-    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
-        ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-
-        $exe  = (Get-Process -Id $PID).Path
-        $args = @('-NoProfile','-ExecutionPolicy','Bypass','-File', "`"$PSCommandPath`"") +
-                ($MyInvocation.UnboundArguments)
-
-        Start-Process -FilePath $exe -Verb RunAs -ArgumentList ($args -join ' ')
-        exit
+    if (-Not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
+        $CommandLine = "-File `"" + $MyInvocation.MyCommand.Path + "`" " + ($MyInvocation.UnboundArguments -join ' ')
+        Start-Process -FilePath PowerShell.exe -Verb RunAs -ArgumentList $CommandLine
+        Exit
     }
 }
 Confirm-Administrator
 
-# ===========================================
-#  Lokale admin gebruiker (let op: security)
-# ===========================================
+# Functie om een gebruiker toe te voegen
 function Add-LocalAdminUser {
     param (
         [string]$Username = "Admin",
         [string]$Password = "L0c@l"
     )
+
     $SecurePassword = $Password | ConvertTo-SecureString -AsPlainText -Force
     $userExists = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
 
@@ -40,17 +32,12 @@ function Add-LocalAdminUser {
 }
 Add-LocalAdminUser -Username "Admin" -Password "L0c@l"
 
-# ===========================================
-#  HP-detectie (CIM i.p.v. verouderde WMI)
-# ===========================================
 function Is-HPDevice {
-    $manufacturer = (Get-CimInstance -ClassName Win32_ComputerSystem).Manufacturer
+    $manufacturer = (Get-WmiObject -Class Win32_ComputerSystem).Manufacturer
     return $manufacturer -like "*Hewlett-Packard*" -or $manufacturer -like "*HP*"
 }
 
-# ===========================================
-#  Registry instellingen
-# ===========================================
+# Functie om registerwaarden in te stellen
 function Set-RegistryValues {
     $registryChanges = @{
         "HKLM:\Software\Policies\Microsoft\Dsh" = @{ "AllowNewsAndInterests" = 0 }
@@ -62,28 +49,29 @@ function Set-RegistryValues {
 
     foreach ($path in $registryChanges.Keys) {
         if (-Not (Test-Path $path)) {
-            New-Item -Path $path -Force | Out-Null
+            New-Item -Path $path -Force
         }
         foreach ($name in $registryChanges[$path].Keys) {
             Set-ItemProperty -Path $path -Name $name -Value $registryChanges[$path][$name]
         }
     }
-    gpupdate /force | Out-Null
+    gpupdate /force
     Write-Output "Registry values updated."
 }
 Set-RegistryValues
 
-# ===========================================
-#  ScreenConnect (ConnectWise Control)
-# ===========================================
-$url    = "https://rmmeu-geeconitsolutions.screenconnect.com/Bin/ScreenConnect.ClientSetup.exe?e=Access&y=Guest"
+# Define the download URL and destination path
+$url = "https://rmmeu-geeconitsolutions.screenconnect.com/Bin/ScreenConnect.ClientSetup.exe?e=Access&y=Guest"
 $output = "$env:TEMP\ScreenConnect.ClientSetup.exe"
+
+# Download the installer
 Invoke-WebRequest -Uri $url -OutFile $output
+
+# Run the installer silently
 Start-Process -FilePath $output -ArgumentList "/silent" -Wait
 
-# ===========================================
-#  Chocolatey + pakketten (zonder --ignore-checksums)
-# ===========================================
+# Functie om Chocolatey te installeren en pakketten 
+
 function Test-Configure-Chocolatey {
     $chocoInstalled = Get-Command choco -ErrorAction SilentlyContinue
 
@@ -103,8 +91,9 @@ function Test-Configure-Chocolatey {
 
     Start-Sleep -Seconds 5
 
+    # Common packages for all systems
     $packages = @(
-        "greenshot", "googlechrome", "adobereader",
+        "greenshot", "googlechrome", "adobereader", 
         "eid-belgium", "eid-belgium-viewer", "winrar",
         "javaruntime", "firefox"
     )
@@ -112,17 +101,19 @@ function Test-Configure-Chocolatey {
     foreach ($package in $packages) {
         try {
             Write-Output "Installing $package..."
-            choco install $package -y --force
+            choco install $package -y --force --ignore-checksums
             Write-Output "$package installed successfully."
         } catch {
-            Write-Output "Error installing $($package): $_"
+            Write-Output "Error installing package: $_"
         }
     }
 
+    # HP-specific packages
     if (Is-HPDevice) {
         Write-Output "HP system detected. Installing HP-specific tools..."
+
         try {
-            choco install hpimageassistant -y --force
+            choco install hpimageassistant -y --force --ignore-checksums
             choco install hpsupportassistant -y --params "/S /L=1033" --force
             Write-Output "HP packages installed successfully."
         } catch {
@@ -132,51 +123,103 @@ function Test-Configure-Chocolatey {
         Write-Output "Non-HP system detected. Skipping HP-specific installations."
     }
 }
+
 Test-Configure-Chocolatey
-
 # ===========================================
-#  Office Deployment Tool + externe XML
+# Office Deployment Tool + Remote XML (Geecon)
 # ===========================================
-$xmlUrl         = "https://geecon.be/voorbereiding/Configuratie.xml"
-$odtUrl         = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
-$odtExe         = Join-Path $env:TEMP "ODTSetup.exe"
-$odtExtractPath = "C:\OfficeDeploymentTool"
-$configFile     = Join-Path $odtExtractPath "Configuratie.xml"
 
+# --- Settings ---
+$xmlUrl          = "https://geecon.be/voorbereiding/Configuratie.xml"
+$odtUrl          = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
+$odtExe          = Join-Path $env:TEMP "ODTSetup.exe"
+$odtExtractPath  = "C:\OfficeDeploymentTool"
+$configFile      = Join-Path $odtExtractPath "Configuratie.xml"  # saved filename
+
+# --- Prep: ensure TLS 1.2 and admin ---
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-Write-Host "Downloading Office Deployment Tool..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "Please run PowerShell as Administrator." -ForegroundColor Yellow
+    exit 1
+}
 
+# --- Download ODT ---
+Write-Host "Downloading Office Deployment Tool..." -ForegroundColor Cyan
+Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe -UseBasicParsing
+
+# --- Create / clean extract directory ---
 if (!(Test-Path $odtExtractPath)) { New-Item -Path $odtExtractPath -ItemType Directory | Out-Null }
 
+# --- Extract ODT ---
 Write-Host "Extracting Office Deployment Tool to $odtExtractPath ..." -ForegroundColor Cyan
 Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:`"$odtExtractPath`"" -Wait
 
+# --- Download your configuration XML ---
 Write-Host "Downloading configuration XML from $xmlUrl ..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $xmlUrl -OutFile $configFile
+Invoke-WebRequest -Uri $xmlUrl -OutFile $configFile -UseBasicParsing
 
 if (!(Test-Path $configFile)) {
     Write-Host "ERROR: Failed to download configuration XML to $configFile" -ForegroundColor Red
     exit 1
 }
 
+# --- Paths ---
 $setupExe = Join-Path $odtExtractPath "setup.exe"
 if (!(Test-Path $setupExe)) {
     Write-Host "ERROR: setup.exe not found in $odtExtractPath" -ForegroundColor Red
     exit 1
 }
 
+# --- Download Office payload as defined by XML ---
 Write-Host "ODT: Downloading Office files (this can take a while)..." -ForegroundColor Cyan
 Start-Process -FilePath $setupExe -ArgumentList "/download `"$configFile`"" -WorkingDirectory $odtExtractPath -Wait
 
+# --- Install Office as defined by XML ---
 Write-Host "ODT: Installing Office with your configuration..." -ForegroundColor Cyan
 Start-Process -FilePath $setupExe -ArgumentList "/configure `"$configFile`"" -WorkingDirectory $odtExtractPath -Wait
 
 Write-Host "✔ Office installation complete." -ForegroundColor Green
 
-# ===========================================
-#  Systeeminstellingen
-# ===========================================
+
+
+# # Variables
+# $odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
+# $odtExe = "$env:TEMP\ODTSetup.exe"
+# $odtExtractPath = "C:\OfficeDeploymentTool"
+# $configFile = "$odtExtractPath\configuration-Office365-x64.xml"  # Adjust path if your Office.xml is elsewhere
+
+# # Download Office Deployment Tool
+# Write-Host "Downloading Office Deployment Tool..."
+# Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe
+
+# # Create extract directory
+# If (!(Test-Path $odtExtractPath)) {
+#     New-Item -Path $odtExtractPath -ItemType Directory | Out-Null
+# }
+
+# # Extract the Deployment Tool
+# Write-Host "Extracting Deployment Tool..."
+# Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:$odtExtractPath" -Wait
+
+# # Copy Office.xml to the directory (or ensure it’s already there)
+# If (!(Test-Path $configFile)) {
+#     Write-Host "ERROR: Office.xml not found at $configFile"
+#     Exit 1
+# }
+
+# # Run the download step
+# Write-Host "Downloading Office365..."
+# Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/download configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
+
+# # Run the install step
+# Write-Host "Installing Office365..."
+# Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
+
+# Write-Host "Office365 installation complete!"
+
+
+# Functie voor instellingen
 function Set-SystemSettings {
     try {
         Set-WinUserLanguageList -LanguageList "nl-BE" -Force
@@ -189,11 +232,8 @@ function Set-SystemSettings {
 }
 Set-SystemSettings
 
-# ===========================================
-#  Desktop/taakbalk opschonen
-# ===========================================
 function Set-NoshowDesktopAndTaskbar {
-    # Verwijderen van desktop-snelkoppelingen
+    # Verwijderen van VLC, Edge, TeamViewer en HP Support Assistant pictogrammen van het bureaublad
     $desktopPath = [Environment]::GetFolderPath("Desktop")
     $shortcuts = @(
         "VLC media player.lnk",
@@ -201,6 +241,7 @@ function Set-NoshowDesktopAndTaskbar {
         "TeamViewer.lnk",
         "HP Support Assistant.lnk"
     )
+
     foreach ($shortcut in $shortcuts) {
         $shortcutPath = Join-Path -Path $desktopPath -ChildPath $shortcut
         if (Test-Path $shortcutPath) {
@@ -209,22 +250,39 @@ function Set-NoshowDesktopAndTaskbar {
         }
     }
 
-    # Taakbalk unpin (standaard cmdlet bestaat niet --> uitgezet)
-    # Get-StartApps | Where-Object { $_.AppID -like "*Microsoft.Edge*" } | ForEach-Object { Unpin-AppFromTaskbar -AppId $_.AppID }
+    # Verwijderen van ongewenste apps uit de taakbalk
+    $appsToUnpin = @(
+        "Microsoft.Edge", "Microsoft.Windows.Copilot", "Microsoft.WindowsStore"
+    )
 
-    # Zoekveld als icoon
+    foreach ($app in $appsToUnpin) {
+        try {
+            $appPackage = Get-StartApps | Where-Object { $_.AppID -like "*$app*" }
+            if ($appPackage) {
+                $appPackage | ForEach-Object { Unpin-AppFromTaskbar -AppId $_.AppID }
+                Write-Output "$app removed from taskbar."
+            }
+        } catch {
+            Write-Output "Error unpinning $_"
+        }
+    }
+
+    # Taakbalk zoekveld aanpassen naar icoon
     try {
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -Value 1
         Write-Output "Search bar configured to icon-only."
     } catch {
         Write-Output "Error configuring search bar: $_"
     }
+
+    # Bureaublad vernieuwen
+    rundll32.exe shell32.dll,Control_RunDLL desk.cpl,0
 }
+
+# Voer de functie uit
 Set-NoshowDesktopAndTaskbar
 
-# ===========================================
-#  IPv6 uitschakelen (alle actieve adapters)
-# ===========================================
+# Functie om IPv6 uit te schakelen
 function Disable-IPv6 {
     try {
         $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
@@ -238,34 +296,42 @@ function Disable-IPv6 {
 }
 Disable-IPv6
 
-# ===========================================
-#  Greenshot configuratie vervangen
-# ===========================================
-$scriptDirectory = Split-Path -Path $PSCommandPath
-$appDataPath     = [Environment]::GetFolderPath("ApplicationData")
-$greenshotPath   = Join-Path -Path $appDataPath -ChildPath "Greenshot"
+#greenshot config files omwisselen
 
+$scriptDirectory = Split-Path -Path $MyInvocation.MyCommand.Path
+
+# Verkrijg het pad naar de Roaming AppData map van de huidige gebruiker
+$appDataPath = [Environment]::GetFolderPath("ApplicationData")
+$greenshotPath = Join-Path -Path $appDataPath -ChildPath "Greenshot"
+
+# Controleer of de Greenshot map bestaat
 if (Test-Path -Path $greenshotPath) {
     try {
+        # Pad naar de huidige en nieuwe configuratiebestanden
         $sourceConfigPath = Join-Path -Path $scriptDirectory -ChildPath "Greenshot2.ini"
-        $oldConfigPath    = Join-Path -Path $greenshotPath -ChildPath "Greenshot.ini"
-        $newConfigPath    = Join-Path -Path $greenshotPath -ChildPath "Greenshot2.ini"
+        $oldConfigPath = Join-Path -Path $greenshotPath -ChildPath "Greenshot.ini"
+        $newConfigPath = Join-Path -Path $greenshotPath -ChildPath "Greenshot2.ini"
 
-        if (-Not (Test-Path -Path $sourceConfigPath)) {
+        # Controleer of Greenshot2.ini bestaat in de scriptmap
+        if (-Not (Test-Path -Path $sourceConfigPath)) {t
             Write-Output "Greenshot2.ini not found in script directory: $scriptDirectory"
             exit 1
         }
 
+        # Kopieer Greenshot2.ini naar de Greenshot-map in AppData
         Copy-Item -Path $sourceConfigPath -Destination $greenshotPath -Force
         Write-Output "Greenshot2.ini copied to Greenshot folder."
 
+        # Verwijder de oude configuratie (Greenshot.ini) als deze bestaat
         if (Test-Path -Path $oldConfigPath) {
             Remove-Item -Path $oldConfigPath -Force
             Write-Output "Old Greenshot.ini removed."
         }
 
+        # Hernoem de nieuwe configuratie naar Greenshot.ini
         Rename-Item -Path $newConfigPath -NewName "Greenshot.ini"
         Write-Output "Greenshot2.ini renamed to Greenshot.ini."
+
     } catch {
         Write-Output "Error processing Greenshot configuration: $_"
     }
@@ -273,15 +339,15 @@ if (Test-Path -Path $greenshotPath) {
     Write-Output "Greenshot folder does not exist in AppData."
 }
 
-# ===========================================
-#  Windows Update module + updates
-# ===========================================
+
 function Install-PSWindowsUpdateModule {
+    # Ensure NuGet is available without prompting
     if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
         Write-Output "Installing NuGet provider silently..."
         Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
     }
 
+    # Now install the module
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         try {
             Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser
@@ -293,6 +359,9 @@ function Install-PSWindowsUpdateModule {
         Write-Output "PSWindowsUpdate module already installed."
     }
 }
+
+
+# Functie om Windows-updates te controleren en te installeren
 function Test-AndInstallUpdates {
     try {
         Import-Module PSWindowsUpdate
@@ -306,12 +375,10 @@ function Test-AndInstallUpdates {
         Write-Output "Error updating: $_"
     }
 }
-Install-PSWindowsUpdateModule
 Test-AndInstallUpdates
 
-# ===========================================
-#  Opruimen
-# ===========================================
+
+# Functie voor schijfopruiming
 function Clear-System {
     try {
         $TempPaths = @("$env:Temp", "C:\Windows\Temp")
@@ -327,40 +394,3 @@ function Clear-System {
     }
 }
 Clear-System
-
-# ===========================================
-#  Reboot & hervatten (RunOnce → geen quote-gedoe)
-# ===========================================
-$stateFile = "C:\Temp\PostInstall_Rebooted.txt"
-$thisScript = $PSCommandPath
-
-if (Test-Path $stateFile) {
-    Write-Output "Systeem is opnieuw opgestart. Voer post-reboot taken uit..."
-
-    Remove-Item $stateFile -Force -ErrorAction SilentlyContinue
-
-    Test-AndInstallUpdates
-
-    if (Is-HPDevice) {
-        # Run-HPIA-InstallCoreOnly   # <-- definieer deze functie of laat uit
-    }
-
-    Write-Output "Post-reboot taken voltooid."
-    exit
-}
-else {
-    Write-Output "Voorbereiden op herstart..."
-
-    if (!(Test-Path "C:\Temp")) {
-        New-Item -Path "C:\Temp" -ItemType Directory | Out-Null
-    }
-
-    Set-Content -Path $stateFile -Value "pending"
-
-    # RunOnce vermijdt alle ingewikkelde quoting
-    $escaped = "`"$PSCommandPath`""
-    New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce" `
-      -Name "ResumeAfterReboot" -Value "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File $escaped" -Force | Out-Null
-
-    Restart-Computer -Force
-}
