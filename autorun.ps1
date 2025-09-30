@@ -390,7 +390,7 @@ function Clear-System {
         Clear-RecycleBin -Force -ErrorAction SilentlyContinue
         Write-Output "System cleanup completed."
     } catch {
-        Write-Output "Error during cleanup"
+        Write-Output "Error during cleanup $_"
     }
 }
 Clear-System
