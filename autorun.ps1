@@ -181,44 +181,6 @@ Start-Process -FilePath $setupExe -ArgumentList "/configure `"$configFile`"" -Wo
 
 Write-Host "Office installation complete." -ForegroundColor Green
 
-
-
-# # Variables
-# $odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_18925-20138.exe"
-# $odtExe = "$env:TEMP\ODTSetup.exe"
-# $odtExtractPath = "C:\OfficeDeploymentTool"
-# $configFile = "$odtExtractPath\configuration-Office365-x64.xml"  # Adjust path if your Office.xml is elsewhere
-
-# # Download Office Deployment Tool
-# Write-Host "Downloading Office Deployment Tool..."
-# Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe
-
-# # Create extract directory
-# If (!(Test-Path $odtExtractPath)) {
-#     New-Item -Path $odtExtractPath -ItemType Directory | Out-Null
-# }
-
-# # Extract the Deployment Tool
-# Write-Host "Extracting Deployment Tool..."
-# Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:$odtExtractPath" -Wait
-
-# # Copy Office.xml to the directory (or ensure it's already there)
-# If (!(Test-Path $configFile)) {
-#     Write-Host "ERROR: Office.xml not found at $configFile"
-#     Exit 1
-# }
-
-# # Run the download step
-# Write-Host "Downloading Office365..."
-# Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/download configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
-
-# # Run the install step
-# Write-Host "Installing Office365..."
-# Start-Process -FilePath "$odtExtractPath\setup.exe" -ArgumentList "/configure configuration-Office365-x64.xml" -WorkingDirectory $odtExtractPath -Wait
-
-# Write-Host "Office365 installation complete!"
-
-
 # Functie voor instellingen
 function Set-SystemSettings {
     try {
@@ -341,16 +303,25 @@ if (Test-Path -Path $greenshotPath) {
 
 
 function Install-PSWindowsUpdateModule {
-    # Ensure NuGet is available without prompting
+    # Ensure TLS 1.2 is enabled (required for PSGallery downloads)
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    # Install NuGet provider silently if missing
     if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
         Write-Output "Installing NuGet provider silently..."
-        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Confirm:$false
+        Import-PackageProvider -Name NuGet -Force
     }
 
-    # Now install the module
+    # Ensure PSGallery is trusted (avoid Y/N prompt)
+    if ((Get-PSRepository -Name "PSGallery").InstallationPolicy -ne "Trusted") {
+        Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+    }
+
+    # Install the PSWindowsUpdate module if not present
     if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
         try {
-            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser
+            Install-Module -Name PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser
             Write-Output "PSWindowsUpdate module installed."
         } catch {
             Write-Output "Error installing PSWindowsUpdate: $_"
