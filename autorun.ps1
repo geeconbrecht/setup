@@ -360,6 +360,7 @@ function Install-PSWindowsUpdateModule {
     }
 }
 
+Install-PSWindowsUpdateModule
 
 # Functie om Windows-updates te controleren en te installeren
 function Test-AndInstallUpdates {
