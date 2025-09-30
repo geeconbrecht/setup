@@ -179,7 +179,7 @@ Start-Process -FilePath $setupExe -ArgumentList "/download `"$configFile`"" -Wor
 Write-Host "ODT: Installing Office with your configuration..." -ForegroundColor Cyan
 Start-Process -FilePath $setupExe -ArgumentList "/configure `"$configFile`"" -WorkingDirectory $odtExtractPath -Wait
 
-Write-Host "✔ Office installation complete." -ForegroundColor Green
+Write-Host "Office installation complete." -ForegroundColor Green
 
 
 
@@ -202,7 +202,7 @@ Write-Host "✔ Office installation complete." -ForegroundColor Green
 # Write-Host "Extracting Deployment Tool..."
 # Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:$odtExtractPath" -Wait
 
-# # Copy Office.xml to the directory (or ensure it’s already there)
+# # Copy Office.xml to the directory (or ensure it's already there)
 # If (!(Test-Path $configFile)) {
 #     Write-Host "ERROR: Office.xml not found at $configFile"
 #     Exit 1
